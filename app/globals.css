@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="dark"] {
+  --bg: #0a0e17;
+  --bg-glow: rgba(16, 185, 129, 0.13);
+  --surface: #0f1522;
+  --surface-2: #0b101b;
+  --border: #1d2535;
+  --border-strong: #2a3446;
+  --fg: #f4f6fa;
+  --fg-muted: #a3acbd;
+  --fg-subtle: #6b7486;
+  --accent: #34d399;
+  --accent-2: #22b07d;
+  --accent-fg: #052e1f;
+  --up: #34d399;
+  --down: #f05252;
+  --danger: #f87171;
+}
+
+[data-theme="light"] {
+  --bg: #f6f8fb;
+  --bg-glow: rgba(16, 185, 129, 0.12);
+  --surface: #ffffff;
+  --surface-2: #f3f5f9;
+  --border: #e3e7ee;
+  --border-strong: #cfd5df;
+  --fg: #0b1220;
+  --fg-muted: #4a5468;
+  --fg-subtle: #7b8496;
+  --accent: #10b981;
+  --accent-2: #059669;
+  --accent-fg: #ffffff;
+  --up: #059669;
+  --down: #dc2626;
+  --danger: #dc2626;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-fg: var(--accent-fg);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-jakarta);
+  --font-mono: var(--font-jetbrains);
+}
+
+body {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(60% 50% at 100% 0%, var(--bg-glow), transparent 70%),
+    radial-gradient(45% 45% at 0% 100%, var(--bg-glow), transparent 70%);
+  background-attachment: fixed;
+  color: var(--fg);
+}
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker 60s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-ticker {
+    animation: none;
+  }
+}
+
+/* Laptop-height screens: tighten vertical spacing so the page fits without scrolling. */
+@custom-variant short (@media (max-height: 820px));
+@custom-variant xshort (@media (max-height: 700px));
