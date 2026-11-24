@@ -1,14 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { COUNTRIES, COUNTRY_BY_CODE } from '../lib/countries';
 import { QUESTIONS, type Answers } from '../lib/questions';
 import { trackPixel } from '../lib/pixel';
+import { createFormTimer, type TimedField } from '../lib/form-timing';
+import { MESSAGES, SA, contactSchema } from '../lib/lead-schema';
+import { submitLead } from '../lib/submit-lead';
 
 type Step = 'form' | 'questions' | 'preparing';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const GENERIC_ERROR = 'Something went wrong. Please try again.';
+const GENERIC_ERROR = MESSAGES.failSave;
 
 const inputClass =
   'h-11 short:h-10 rounded-lg border border-line bg-surface-2 px-3.5 text-[15px] text-fg placeholder:text-subtle outline-none transition-colors focus:border-accent/70 focus:ring-2 focus:ring-accent/20';
@@ -18,49 +19,44 @@ export default function LeadForm() {
   const [email, setEmail] = useState('');
   const [firstname, setFirstname] = useState('');
   const [lastname, setLastname] = useState('');
-  const [country, setCountry] = useState('CA');
-  const countryTouched = useRef(false);
   const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [answers, setAnswers] = useState<Answers>({});
   const [showMissing, setShowMissing] = useState(false);
+  const [website, setWebsite] = useState(''); // honeypot
   const [request, setRequest] = useState<Promise<string | null> | null>(null);
 
-  const dial = COUNTRY_BY_CODE.get(country)?.dial ?? '';
-  const digits = phone.replace(/\D/g, '').replace(/^0+/, '');
+  // Landing/field/answer/click times for the leads log (app/lib/form-timing.ts).
+  const timer = useRef<ReturnType<typeof createFormTimer> | null>(null);
+  const timed = () => (timer.current ??= createFormTimer());
+  useEffect(() => {
+    timed().formLoaded();
+  }, []);
+  useEffect(() => {
+    if (step === 'questions') timed().questionsShown();
+  }, [step]);
+  /** Focus/blur/change handlers that record timing for a text field. */
+  const track = (k: TimedField, setter: (v: string) => void) => ({
+    onFocus: () => timed().focus(k),
+    onBlur: () => timed().blur(k),
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      timed().input(k);
+      setter(e.target.value);
+    },
+  });
+
+  const contact = { firstName: firstname, lastName: lastname, email, phone };
 
   const handleError = useCallback((message: string) => {
     setError(message);
     setStep('form');
   }, []);
 
-  // Preselect the visitor's country from their IP, falling back to the browser locale (e.g. "en-CA").
-  // Never overrides a country the visitor already picked.
-  useEffect(() => {
-    fetch('/api/geo')
-      .then((res) => (res.ok ? res.json() : null))
-      .catch(() => null)
-      .then((data) => {
-        const region =
-          data?.country ?? navigator.language.split('-')[1]?.toUpperCase();
-        if (!countryTouched.current && region && COUNTRY_BY_CODE.has(region)) {
-          setCountry(region);
-        }
-      });
-  }, []);
-
   function continueToQuestions(e: React.FormEvent) {
     e.preventDefault();
-    if (!firstname.trim() || !lastname.trim()) {
-      setError('Enter your first and last name.');
-      return;
-    }
-    if (!EMAIL_RE.test(email.trim())) {
-      setError('Enter a valid email address.');
-      return;
-    }
-    if (digits.length < 6 || dial.length + digits.length > 15) {
-      setError('Enter a valid mobile number.');
+    const res = contactSchema.safeParse(contact);
+    if (!res.success) {
+      setError(res.error.issues[0]?.message ?? MESSAGES.failCheck);
       return;
     }
 
@@ -70,31 +66,27 @@ export default function LeadForm() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    // Every click counts, including ones that fail validation.
+    const timing = timed().submitClick();
     if (QUESTIONS.some((q) => !answers[q.key])) {
       setShowMissing(true);
-      setError('Please answer all the questions.');
+      setError(MESSAGES.answersMissing);
       return;
     }
 
     setError('');
     setRequest(
-      fetch('/api/lead', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstname: firstname.trim(),
-          lastname: lastname.trim(),
-          email: email.trim(),
-          mobile: `+${dial}${digits}`,
-          country_code: country,
-          answers,
+      // submitLead throws only when the details fail the shared schema check.
+      Promise.resolve()
+        .then(() => submitLead({ contact, answers, website, timing }))
+        .catch(() => {
+          throw new Error(MESSAGES.failCheck);
+        })
+        .then((res) => {
+          if (!res.ok) throw new Error(MESSAGES.failSave);
+          trackPixel('Lead');
+          return res.autologinUrl ?? null;
         }),
-      }).then(async (res) => {
-        const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.error ?? GENERIC_ERROR);
-        trackPixel('Lead');
-        return safeUrl(data?.data?.autologin_url);
-      }),
     );
     setStep('preparing');
   }
@@ -121,17 +113,17 @@ export default function LeadForm() {
           }}
           className="text-[13px] font-semibold text-accent hover:underline"
         >
-          ← Back to your details
+          → العودة إلى بياناتك
         </button>
-        <h2 className="mt-2 font-display text-[22px] font-bold tracking-tight">
-          A few quick questions
+        <h2 className="mt-2 font-display text-[22px] font-bold">
+          بعض الأسئلة السريعة
         </h2>
         <p className="mt-1 text-[15px] text-muted xshort:hidden">
-          This helps us prepare the right account for you.
+          يساعدنا ذلك في تجهيز الحساب المناسب لك.
         </p>
 
         <form onSubmit={submit} noValidate className="mt-4">
-          <div className="-mr-3 max-h-[calc(100dvh-420px)] space-y-4 overflow-y-auto pr-3 pb-5 [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)] [scrollbar-color:var(--border-strong)_transparent] [scrollbar-width:thin]">
+          <div className="-me-3 max-h-[calc(100dvh-420px)] space-y-4 overflow-y-auto pe-3 pb-5 [mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)] [scrollbar-color:var(--border-strong)_transparent] [scrollbar-width:thin]">
             {QUESTIONS.map((q) => {
               const missing = showMissing && !answers[q.key];
               return (
@@ -141,10 +133,10 @@ export default function LeadForm() {
                   </legend>
                   <div className="mt-2 grid gap-1.5 sm:grid-cols-2">
                     {q.options.map((option) => {
-                      const checked = answers[q.key] === option;
+                      const checked = answers[q.key] === option.value;
                       return (
                         <label
-                          key={option}
+                          key={option.value}
                           className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 text-[13.5px] leading-snug transition-colors ${
                             checked
                               ? 'border-accent/60 bg-accent/10 text-fg'
@@ -156,11 +148,12 @@ export default function LeadForm() {
                           <input
                             type="radio"
                             name={q.key}
-                            value={option}
+                            value={option.value}
                             checked={checked}
-                            onChange={() =>
-                              setAnswers((a) => ({ ...a, [q.key]: option }))
-                            }
+                            onChange={() => {
+                              timed().input(q.key as TimedField);
+                              setAnswers((a) => ({ ...a, [q.key]: option.value }));
+                            }}
                             className="peer sr-only"
                           />
                           <span
@@ -184,7 +177,7 @@ export default function LeadForm() {
                               </svg>
                             )}
                           </span>
-                          {option}
+                          {option.label}
                         </label>
                       );
                     })}
@@ -196,7 +189,19 @@ export default function LeadForm() {
           <div className="mt-3">
             <ErrorText message={error} />
           </div>
-          <SubmitButton label="Submit" />
+          {/* Honeypot: invisible to people, bots tend to fill it. */}
+          <div aria-hidden="true" className="sr-only">
+            <label htmlFor="website">Website</label>
+            <input
+              id="website"
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+            />
+          </div>
+          <SubmitButton label="إرسال" />
         </form>
       </>
     );
@@ -204,11 +209,11 @@ export default function LeadForm() {
 
   return (
     <>
-      <h2 className="font-display text-[22px] font-bold tracking-tight">
-        Continue to your account
+      <h2 className="font-display text-[22px] font-bold">
+        المتابعة إلى حسابك
       </h2>
       <p className="mt-2 text-[15px] text-muted xshort:hidden">
-        Enter your details to continue securely.
+        أدخل بياناتك للمتابعة بأمان.
       </p>
 
       <form
@@ -219,39 +224,39 @@ export default function LeadForm() {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="firstname" className="text-[13px] font-semibold">
-              First name
+              الاسم الأول
             </label>
             <input
               id="firstname"
               autoComplete="given-name"
-              placeholder="John"
+              placeholder="محمد"
               value={firstname}
-              onChange={(e) => setFirstname(e.target.value)}
+              {...track('firstName', setFirstname)}
               className={`${inputClass} mt-1.5 w-full`}
             />
           </div>
           <div>
             <label htmlFor="lastname" className="text-[13px] font-semibold">
-              Last name
+              اسم العائلة
             </label>
             <input
               id="lastname"
               autoComplete="family-name"
-              placeholder="Doe"
+              placeholder="العتيبي"
               value={lastname}
-              onChange={(e) => setLastname(e.target.value)}
+              {...track('lastName', setLastname)}
               className={`${inputClass} mt-1.5 w-full`}
             />
           </div>
         </div>
         <div>
           <label htmlFor="email" className="text-[13px] font-semibold">
-            Email address
+            البريد الإلكتروني
           </label>
           <div className="relative mt-1.5">
             <svg
               viewBox="0 0 24 24"
-              className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-subtle"
+              className="pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2 text-subtle"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
@@ -264,74 +269,39 @@ export default function LeadForm() {
             <input
               id="email"
               type="email"
+              dir="ltr"
               autoComplete="email"
               placeholder="you@email.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`${inputClass} w-full pl-10`}
+              {...track('email', setEmail)}
+              className={`${inputClass} w-full pr-10 text-right`}
             />
           </div>
         </div>
         <div>
-          <label htmlFor="country" className="text-[13px] font-semibold">
-            Country
-          </label>
-          <div className="relative mt-1.5">
-            <select
-              id="country"
-              autoComplete="country"
-              value={country}
-              onChange={(e) => {
-                setCountry(e.target.value);
-                countryTouched.current = true;
-              }}
-              className={`${inputClass} w-full cursor-pointer appearance-none pr-10`}
-            >
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <svg
-              viewBox="0 0 24 24"
-              className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-subtle"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </div>
-        </div>
-        <div>
           <label htmlFor="mobile" className="text-[13px] font-semibold">
-            Mobile number
+            رقم الجوال
           </label>
-          <div className="relative mt-1.5">
-            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-1.5 border-r border-line pl-3.5 pr-3 text-[15px] text-muted">
-              <span className="text-[11px] font-semibold text-subtle">
-                {country}
-              </span>
-              <span className="font-medium text-fg">+{dial}</span>
+          {/* Phone numbers read left-to-right, so the flag and +966 stay on the left. */}
+          <div dir="ltr" className="relative mt-1.5">
+            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center gap-2 border-r border-line pl-3.5 pr-3 text-[15px]">
+              <SaudiFlag />
+              <span className="font-medium text-fg">{SA.code}</span>
             </span>
             <input
               id="mobile"
               type="tel"
               inputMode="tel"
               autoComplete="tel-national"
-              placeholder="416 555 1234"
+              placeholder="5X XXX XXXX"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              style={{ paddingLeft: `${4.25 + dial.length * 0.55}rem` }}
-              className={`${inputClass} w-full`}
+              {...track('phone', setPhone)}
+              className={`${inputClass} w-full pl-26`}
             />
           </div>
         </div>
         <ErrorText message={error} />
-        <SubmitButton label="Continue" />
+        <SubmitButton label="متابعة" />
       </form>
 
       <p className="mt-4 flex short:mt-3 items-center justify-center gap-1.5 text-xs text-subtle xshort:hidden">
@@ -346,39 +316,28 @@ export default function LeadForm() {
           <rect x="5" y="11" width="14" height="10" rx="2" />
           <path d="M8 11V7a4 4 0 0 1 8 0v4" />
         </svg>
-        Protected by 256-bit encryption
+        محمي بتشفير 256 بت
       </p>
       <p className="mt-4 text-xs short:mt-3 leading-relaxed text-subtle">
-        By continuing you agree to the{' '}
+        بالمتابعة، فإنك توافق على{' '}
         <a href="#" className="text-muted hover:text-fg">
-          Terms
+          الشروط
         </a>{' '}
-        and{' '}
+        و{' '}
         <a href="#" className="text-muted hover:text-fg">
-          Privacy Policy
+          سياسة الخصوصية
         </a>
-        . We may contact you by email or phone about your account.
+        . قد نتواصل معك عبر البريد الإلكتروني أو الهاتف بخصوص حسابك.
       </p>
     </>
   );
 }
 
-// Only follow http(s) links from the CRM response.
-function safeUrl(value: unknown) {
-  if (typeof value !== 'string') return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
 const STAGES = [
-  'Verifying your email',
-  'Securing your connection',
-  'Checking account access',
-  'Preparing your account',
+  'جارٍ التحقق من بريدك الإلكتروني',
+  'جارٍ تأمين اتصالك',
+  'جارٍ التحقق من صلاحية الوصول إلى الحساب',
+  'جارٍ تجهيز حسابك',
 ];
 
 // Holds just short of 100% until the submission resolves.
@@ -472,31 +431,31 @@ function PreparingAccount({
         </svg>
       </div>
 
-      <h2 className="mt-5 font-display short:mt-3 text-[22px] font-bold tracking-tight">
-        Preparing your account
+      <h2 className="mt-5 font-display short:mt-3 text-[22px] font-bold">
+        جارٍ تجهيز حسابك
       </h2>
       <p className="mt-2 text-[15px] text-muted">
-        Signing in as{' '}
-        <span className="font-mono font-semibold text-fg">
+        جارٍ تسجيل الدخول باسم{' '}
+        <span dir="ltr" className="font-mono font-semibold text-fg">
           {maskEmail(email)}
         </span>
-        . Please keep this page open.
+        . يرجى إبقاء هذه الصفحة مفتوحة.
       </p>
 
       <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-line">
         <div
-          className="h-full rounded-full bg-linear-to-r from-accent-2 to-accent transition-[width] duration-150 ease-linear"
+          className="h-full rounded-full bg-linear-to-l from-accent-2 to-accent transition-[width] duration-150 ease-linear"
           style={{ width: `${progress}%` }}
         />
       </div>
       <div className="mt-2 flex justify-between text-[13px]">
         <span className="text-muted">
-          {progress < 100 ? `${STAGES[activeStage]}…` : 'Redirecting…'}
+          {progress < 100 ? `${STAGES[activeStage]}…` : 'جارٍ التحويل…'}
         </span>
-        <span className="font-mono font-semibold text-accent">{progress}%</span>
+        <span dir="ltr" className="font-mono font-semibold text-accent">{progress}%</span>
       </div>
 
-      <ul className="mt-5 space-y-3.5 short:mt-4 short:space-y-2.5 short:p-4 rounded-xl border border-line bg-surface-2/60 p-5 text-left text-[15px]">
+      <ul className="mt-5 space-y-3.5 short:mt-4 short:space-y-2.5 short:p-4 rounded-xl border border-line bg-surface-2/60 p-5 text-start text-[15px]">
         {STAGES.map((label, i) => {
           const complete = progress >= (i + 1) * 25;
           const current = !complete && i === activeStage;
@@ -521,14 +480,14 @@ function PreparingAccount({
       </ul>
 
       <p className="mt-6 short:mt-4 text-[13px] text-subtle">
-        Raw spreads from 0.0pts
+        فروقات أسعار خام تبدأ من 0.0 نقطة
       </p>
       <button
         type="button"
         onClick={onCancel}
         className="mt-4 text-[15px] font-semibold text-accent hover:underline"
       >
-        ← Use different details
+        → استخدام بيانات مختلفة
       </button>
     </div>
   );
@@ -562,6 +521,34 @@ function StageIcon({ state }: { state: 'complete' | 'current' | 'pending' }) {
   );
 }
 
+// An inline SVG instead of the 🇸🇦 emoji, which Windows shows as the letters "SA".
+// Simplified for its small size: the green field, the Shahada and the sword.
+function SaudiFlag() {
+  return (
+    <svg
+      viewBox="0 0 30 20"
+      className="h-3.5 w-5.25 shrink-0 rounded-xs ring-1 ring-black/10"
+      role="img"
+      aria-label="المملكة العربية السعودية"
+    >
+      <rect width="30" height="20" fill="#006C35" />
+      <text
+        x="15"
+        y="10"
+        textAnchor="middle"
+        fill="#fff"
+        fontSize="5.2"
+        fontWeight="700"
+        direction="rtl"
+      >
+        لا إله إلا الله محمد رسول الله
+      </text>
+      <path d="M8 14.2h13.5l1.5-.9" stroke="#fff" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M9.6 13v2.4" stroke="#fff" strokeWidth="0.9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function ErrorText({ message }: { message: string }) {
   if (!message) return null;
   return (
@@ -587,7 +574,7 @@ function SubmitButton({
       {label}
       <svg
         viewBox="0 0 24 24"
-        className="size-4"
+        className="size-4 -scale-x-100"
         fill="none"
         stroke="currentColor"
         strokeWidth="2.5"

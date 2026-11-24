@@ -34,7 +34,8 @@ function QuoteList({ hidden }: { hidden?: boolean }) {
 
 export default function Ticker() {
   return (
-    <div className="overflow-hidden border-b border-line bg-surface-2/70 font-mono text-xs">
+    // Kept left-to-right: the symbols are Latin and the scroll animation moves leftwards.
+    <div dir="ltr" className="overflow-hidden border-b border-line bg-surface-2/70 font-mono text-xs">
       <div className="flex w-max py-2.5 animate-ticker">
         <QuoteList />
         <QuoteList hidden />

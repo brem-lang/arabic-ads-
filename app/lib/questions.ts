@@ -1,50 +1,64 @@
-export type Question = { key: string; label: string; options: string[] };
+export type Option = { value: string; label: string };
+export type Question = { key: string; label: string; options: Option[] };
 
-// Each answer is sent to the CRM as { key, value } where value is the chosen option's text.
+// Each answer is sent to the CRM as { key, value }. `value` stays in English so the CRM
+// keeps receiving the same values; `label` is the Arabic text shown to the visitor.
 export const QUESTIONS: Question[] = [
   {
     key: 'is_saudi_citizen',
-    label: 'Are you a Saudi Citizen?',
-    options: ['Yes, I am a Saudi citizen.', 'No'],
+    label: 'هل أنت مواطن سعودي؟',
+    options: [
+      { value: 'Yes, I am a Saudi citizen.', label: 'نعم، أنا مواطن سعودي.' },
+      { value: 'No', label: 'لا' },
+    ],
   },
   {
     key: 'investment_amount',
-    label: 'What amount do you plan to allocate for investment?',
+    label: 'ما المبلغ الذي تخطط لتخصيصه للاستثمار؟',
     options: [
-      'SAR 1,000–4,999',
-      'SAR 5,000–9,999',
-      'SAR 10,000–49,999',
-      'SAR 50,000 or more',
-      "I haven't decided yet.",
+      { value: 'SAR 1,000–4,999', label: '1,000–4,999 ريال سعودي' },
+      { value: 'SAR 5,000–9,999', label: '5,000–9,999 ريال سعودي' },
+      { value: 'SAR 10,000–49,999', label: '10,000–49,999 ريال سعودي' },
+      { value: 'SAR 50,000 or more', label: '50,000 ريال سعودي أو أكثر' },
+      { value: "I haven't decided yet.", label: 'لم أقرر بعد.' },
     ],
   },
   {
     key: 'investment_start_time',
-    label: 'When do you plan to start investing?',
+    label: 'متى تخطط لبدء الاستثمار؟',
     options: [
-      'Within the next 7 days',
-      'Within the next 30 days',
-      'Within 1–3 months',
-      'I am just looking for now',
+      { value: 'Within the next 7 days', label: 'خلال الأيام السبعة القادمة' },
+      { value: 'Within the next 30 days', label: 'خلال الثلاثين يومًا القادمة' },
+      { value: 'Within 1–3 months', label: 'خلال 1–3 أشهر' },
+      { value: 'I am just looking for now', label: 'أتصفح فقط في الوقت الحالي' },
     ],
   },
   {
     key: 'experience_level',
-    label: 'What is your level of experience in trading and investing?',
+    label: 'ما مستوى خبرتك في التداول والاستثمار؟',
     options: [
-      'Beginner — I am ready to learn',
-      'I have some experience',
-      'Experienced investor',
-      'I am actively involved in trading in the financial markets',
+      { value: 'Beginner — I am ready to learn', label: 'مبتدئ — مستعد للتعلّم' },
+      { value: 'I have some experience', label: 'لدي بعض الخبرة' },
+      { value: 'Experienced investor', label: 'مستثمر ذو خبرة' },
+      {
+        value: 'I am actively involved in trading in the financial markets',
+        label: 'أتداول بنشاط في الأسواق المالية',
+      },
     ],
   },
   {
     key: 'wants_contact',
     label:
-      'Would you like to be contacted to discuss investment options, trading risks, and the requirements for opening an account?',
+      'هل ترغب في أن نتواصل معك لمناقشة خيارات الاستثمار ومخاطر التداول ومتطلبات فتح الحساب؟',
     options: [
-      'Yes, I am ready to discuss the next steps.',
-      'Yes, but I need more information first.',
+      {
+        value: 'Yes, I am ready to discuss the next steps.',
+        label: 'نعم، أنا مستعد لمناقشة الخطوات التالية.',
+      },
+      {
+        value: 'Yes, but I need more information first.',
+        label: 'نعم، لكنني أحتاج إلى مزيد من المعلومات أولًا.',
+      },
     ],
   },
 ];

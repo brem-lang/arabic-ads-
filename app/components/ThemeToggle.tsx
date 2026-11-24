@@ -14,7 +14,7 @@ export default function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      aria-label="Toggle color theme"
+      aria-label="تبديل المظهر"
       className="grid size-8 place-items-center rounded-lg border border-line bg-surface text-muted transition-colors hover:text-fg hover:border-line-strong"
     >
       <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

@@ -52,8 +52,8 @@
   --color-up: var(--up);
   --color-down: var(--down);
   --color-danger: var(--danger);
-  --font-sans: var(--font-inter);
-  --font-display: var(--font-jakarta);
+  --font-sans: var(--font-plex-arabic);
+  --font-display: var(--font-cairo);
   --font-mono: var(--font-jetbrains);
 }
 
@@ -64,6 +64,12 @@ body {
     radial-gradient(45% 45% at 0% 100%, var(--bg-glow), transparent 70%);
   background-attachment: fixed;
   color: var(--fg);
+}
+
+/* Letter-spacing breaks the joins between Arabic letters, so turn off every tracking-* utility.
+   Unlayered rules beat Tailwind's layered utilities without needing !important. */
+:lang(ar) * {
+  letter-spacing: normal;
 }
 
 @keyframes ticker {
